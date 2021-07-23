@@ -9,7 +9,7 @@
 [GitHub contributors](https://github.com/CannabisChain/cannabis-blockchain/graphs/contributors)
 
 ## Info:
-- [Discord](https://discord.com/invite/EDcFpwMJ)
+- [Discord](https://discord.gg/mjgz6JhA7F)
 - [Website](https://cannabischain.net)
 - [Explorer (Coming soon)](https://explorer.cannabischain.net)
 - [Faucet (Coming soon)](https://faucet.cannabischain.net)
