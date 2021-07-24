@@ -27,7 +27,9 @@ from cannabis.protocols.pool_protocol import (
 )
 from cannabis.protocols.protocol_message_types import ProtocolMessageTypes
 from cannabis.server.outbound_message import NodeType, make_msg
+from cannabis.server.server import ssl_context_for_root
 from cannabis.server.ws_connection import WSCannabisConnection
+from cannabis.ssl.create_ssl import get_mozilla_ca_crt
 from cannabis.types.blockchain_format.proof_of_space import ProofOfSpace
 from cannabis.types.blockchain_format.sized_bytes import bytes32
 from cannabis.util.bech32m import decode_puzzle_hash
@@ -55,6 +57,22 @@ UPDATE_HARVESTER_CACHE_INTERVAL: int = 60
 """
 HARVESTER PROTOCOL (FARMER <-> HARVESTER)
 """
+
+
+class HarvesterCacheEntry:
+    def __init__(self):
+        self.data: Optional[dict] = None
+        self.last_update: float = 0
+
+    def set_data(self, data):
+        self.data = data
+        self.last_update = time.time()
+
+    def needs_update(self):
+        return time.time() - self.last_update > UPDATE_HARVESTER_CACHE_INTERVAL
+
+    def expired(self):
+        return time.time() - self.last_update > UPDATE_HARVESTER_CACHE_INTERVAL * 10
 
 
 class Farmer:
@@ -132,7 +150,7 @@ class Farmer:
         # Last time we updated pool_state based on the config file
         self.last_config_access_time: uint64 = uint64(0)
 
-        self.harvester_cache: Dict[str, Dict[str, Tuple[Dict, float]]] = {}
+        self.harvester_cache: Dict[str, Dict[str, HarvesterCacheEntry]] = {}
 
     async def _start(self):
         self.update_pool_state_task = asyncio.create_task(self._periodically_update_pool_state_task())
@@ -179,7 +197,9 @@ class Farmer:
     async def _pool_get_pool_info(self, pool_config: PoolWalletConfig) -> Optional[Dict]:
         try:
             async with aiohttp.ClientSession(trust_env=True) as session:
-                async with session.get(f"{pool_config.pool_url}/pool_info") as resp:
+                async with session.get(
+                    f"{pool_config.pool_url}/pool_info", ssl=ssl_context_for_root(get_mozilla_ca_crt())
+                ) as resp:
                     if resp.ok:
                         response: Dict = json.loads(await resp.text())
                         self.log.info(f"GET /pool_info response: {response}")
@@ -215,7 +235,11 @@ class Farmer:
         }
         try:
             async with aiohttp.ClientSession(trust_env=True) as session:
-                async with session.get(f"{pool_config.pool_url}/farmer", params=get_farmer_params) as resp:
+                async with session.get(
+                    f"{pool_config.pool_url}/farmer",
+                    params=get_farmer_params,
+                    ssl=ssl_context_for_root(get_mozilla_ca_crt()),
+                ) as resp:
                     if resp.ok:
                         response: Dict = json.loads(await resp.text())
                         self.log.info(f"GET /farmer response: {response}")
@@ -254,7 +278,10 @@ class Farmer:
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.post(
-                    f"{pool_config.pool_url}/farmer", data=post_farmer_body, headers=headers
+                    f"{pool_config.pool_url}/farmer",
+                    data=post_farmer_body,
+                    headers=headers,
+                    ssl=ssl_context_for_root(get_mozilla_ca_crt()),
                 ) as resp:
                     if resp.ok:
                         response: Dict = json.loads(await resp.text())
@@ -290,7 +317,11 @@ class Farmer:
 
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.put(f"{pool_config.pool_url}/farmer", data=put_farmer_body) as resp:
+                async with session.put(
+                    f"{pool_config.pool_url}/farmer",
+                    data=put_farmer_body,
+                    ssl=ssl_context_for_root(get_mozilla_ca_crt()),
+                ) as resp:
                     if resp.ok:
                         response: Dict = json.loads(await resp.text())
                         self.log.info(f"PUT /farmer response: {response}")
@@ -532,17 +563,18 @@ class Farmer:
 
     async def update_cached_harvesters(self):
         # First remove outdated cache entries
+        self.log.debug(f"update_cached_harvesters cache entries: {len(self.harvester_cache)}")
         remove_hosts = []
         for host, host_cache in self.harvester_cache.items():
             remove_peers = []
             for peer_id, peer_cache in host_cache.items():
-                _, last_update = peer_cache
-                # If the peer cache hasn't been updated for 10x interval, drop it since the harvester doesn't respond
-                if time.time() - last_update > UPDATE_HARVESTER_CACHE_INTERVAL * 10:
+                # If the peer cache is expired it means the harvester didn't respond for too long
+                if peer_cache.expired():
                     remove_peers.append(peer_id)
             for key in remove_peers:
                 del host_cache[key]
             if len(host_cache) == 0:
+                self.log.debug(f"update_cached_harvesters remove host: {host}")
                 remove_hosts.append(host)
         for key in remove_hosts:
             del self.harvester_cache[key]
@@ -551,17 +583,15 @@ class Farmer:
             if connection.connection_type != NodeType.HARVESTER:
                 continue
             cache_entry = await self.get_cached_harvesters(connection)
-            if cache_entry is None or time.time() - cache_entry[1] > UPDATE_HARVESTER_CACHE_INTERVAL:
-                response = await connection.request_plots(harvester_protocol.RequestPlots(), timeout=5)
+            if cache_entry.needs_update():
+                self.log.debug(f"update_cached_harvesters update harvester: {connection.peer_node_id}")
+                response = await connection.request_plots(
+                    harvester_protocol.RequestPlots(), timeout=UPDATE_HARVESTER_CACHE_INTERVAL
+                )
                 if response is not None:
                     if isinstance(response, harvester_protocol.RespondPlots):
-                        if connection.peer_host not in self.harvester_cache:
-                            self.harvester_cache[connection.peer_host] = {}
-
-                        self.harvester_cache[connection.peer_host][connection.peer_node_id.hex()] = (
-                            response.to_json_dict(),
-                            time.time(),
-                        )
+                        cache_entry.set_data(response.to_json_dict())
+                        self.log.debug(f"update_cached_harvesters cache updated: {connection.peer_node_id}")
                     else:
                         self.log.error(
                             f"Invalid response from harvester:"
@@ -572,27 +602,34 @@ class Farmer:
                         "Harvester did not respond. You might need to update harvester to the latest version"
                     )
 
-    async def get_cached_harvesters(self, connection: WSCannabisConnection) -> Optional[Tuple[Dict, float]]:
+    async def get_cached_harvesters(self, connection: WSCannabisConnection) -> HarvesterCacheEntry:
         host_cache = self.harvester_cache.get(connection.peer_host)
         if host_cache is None:
-            return None
-        return host_cache.get(connection.peer_node_id.hex())
+            host_cache = {}
+            self.harvester_cache[connection.peer_host] = host_cache
+        node_cache = host_cache.get(connection.peer_node_id.hex())
+        if node_cache is None:
+            node_cache = HarvesterCacheEntry()
+            host_cache[connection.peer_node_id.hex()] = node_cache
+        return node_cache
 
     async def get_harvesters(self) -> Dict:
         harvesters: List = []
         for connection in self.server.get_connections():
             if connection.connection_type != NodeType.HARVESTER:
                 continue
-
+            self.log.debug(f"get_harvesters host: {connection.peer_host}, node_id: {connection.peer_node_id}")
             cache_entry = await self.get_cached_harvesters(connection)
-            if cache_entry is not None:
-                harvester_object: dict = dict(cache_entry[0])
+            if cache_entry.data is not None:
+                harvester_object: dict = dict(cache_entry.data)
                 harvester_object["connection"] = {
                     "node_id": connection.peer_node_id.hex(),
                     "host": connection.peer_host,
                     "port": connection.peer_port,
                 }
                 harvesters.append(harvester_object)
+            else:
+                self.log.debug(f"get_harvesters no cache: {connection.peer_host}, node_id: {connection.peer_node_id}")
 
         return {"harvesters": harvesters}
 

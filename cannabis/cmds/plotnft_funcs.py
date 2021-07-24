@@ -13,6 +13,8 @@ from cannabis.protocols.pool_protocol import POOL_PROTOCOL_VERSION
 from cannabis.rpc.farmer_rpc_client import FarmerRpcClient
 from cannabis.rpc.wallet_rpc_client import WalletRpcClient
 from cannabis.types.blockchain_format.sized_bytes import bytes32
+from cannabis.server.server import ssl_context_for_root
+from cannabis.ssl.create_ssl import get_mozilla_ca_crt
 from cannabis.util.bech32m import encode_puzzle_hash
 from cannabis.util.byte_types import hexstr_to_bytes
 from cannabis.util.config import load_config
@@ -25,7 +27,7 @@ from cannabis.wallet.util.wallet_types import WalletType
 async def create_pool_args(pool_url: str) -> Dict:
     try:
         async with aiohttp.ClientSession() as session:
-            async with session.get(f"{pool_url}/pool_info") as response:
+            async with session.get(f"{pool_url}/pool_info", ssl=ssl_context_for_root(get_mozilla_ca_crt())) as response:
                 if response.ok:
                     json_dict = json.loads(await response.text())
                 else:
@@ -55,7 +57,12 @@ async def create(args: dict, wallet_client: WalletRpcClient, fingerprint: int) -
         relative_lock_height = uint32(0)
         target_puzzle_hash = None  # wallet will fill this in
     elif state == "FARMING_TO_POOL":
+        config = load_config(DEFAULT_ROOT_PATH, "config.yaml")
+        enforce_https = config["full_node"]["selected_network"] == "mainnet"
         pool_url = str(args["pool_url"])
+        if enforce_https and not pool_url.startswith("https://"):
+            print(f"Pool URLs must be HTTPS on mainnet {pool_url}. Aborting.")
+            return
         json_dict = await create_pool_args(pool_url)
         relative_lock_height = json_dict["relative_lock_height"]
         target_puzzle_hash = hexstr_to_bytes(json_dict["target_puzzle_hash"])
@@ -260,12 +267,17 @@ async def submit_tx_with_confirmation(
 
 
 async def join_pool(args: dict, wallet_client: WalletRpcClient, fingerprint: int) -> None:
-    pool_url = args["pool_url"]
+    config = load_config(DEFAULT_ROOT_PATH, "config.yaml")
+    enforce_https = config["full_node"]["selected_network"] == "mainnet"
+    pool_url: str = args["pool_url"]
+    if enforce_https and not pool_url.startswith("https://"):
+        print(f"Pool URLs must be HTTPS on mainnet {pool_url}. Aborting.")
+        return
     wallet_id = args.get("id", None)
     prompt = not args.get("yes", False)
     try:
         async with aiohttp.ClientSession() as session:
-            async with session.get(f"{pool_url}/pool_info") as response:
+            async with session.get(f"{pool_url}/pool_info", ssl=ssl_context_for_root(get_mozilla_ca_crt())) as response:
                 if response.ok:
                     json_dict = json.loads(await response.text())
                 else:
