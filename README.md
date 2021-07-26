@@ -2,9 +2,9 @@
 
 ![Alt text](https://cannabischain.net/images/256.png)
 
-| Current Release/main | Development Branch/dev |
-|         :---:          |          :---:         |
-| [![Ubuntu Core Tests (Coming soon)](https://github.com/Chia-Network/chia-blockchain/actions/workflows/build-test-ubuntu-core.yml/badge.svg)](https://github.com/Chia-Network/chia-blockchain/actions/workflows/build-test-ubuntu-core.yml) [![MacOS Core Tests (Coming Soon)](https://github.com/Chia-Network/chia-blockchain/actions/workflows/build-test-macos-core.yml/badge.svg)](https://github.com/Chia-Network/chia-blockchain/actions/workflows/build-test-macos-core.yml) [![Windows Installer on Windows 10 and Python 3.7 (Coming soon)](https://github.com/Chia-Network/chia-blockchain/actions/workflows/build-windows-installer.yml/badge.svg)](https://github.com/Chia-Network/chia-blockchain/actions/workflows/build-windows-installer.yml)  |  [![Ubuntu Core Tests (Coming soon)](https://github.com/Chia-Network/chia-blockchain/actions/workflows/build-test-ubuntu-core.yml/badge.svg?branch=dev)](https://github.com/Chia-Network/chia-blockchain/actions/workflows/build-test-ubuntu-core.yml) [![MacOS Core Tests (Coming soon)](https://github.com/Chia-Network/chia-blockchain/actions/workflows/build-test-macos-core.yml/badge.svg?branch=dev)](https://github.com/Chia-Network/chia-blockchain/actions/workflows/build-test-macos-core.yml) [![Windows Installer on Windows 10 and Python 3.7 (Coming soon)](https://github.com/Chia-Network/chia-blockchain/actions/workflows/build-windows-installer.yml/badge.svg?branch=dev)](https://github.com/Chia-Network/chia-blockchain/actions/workflows/build-windows-installer.yml) |
+| Current Release/main | 
+|         :---:          
+| [![Ubuntu Core Tests](https://github.com/CannabisChain/cannabis-blockchain/actions/workflows/build-linux-installer-deb.yml/badge.svg)](https://github.com/CannabisChain/cannabis-blockchain/actions/workflows/build-linux-installer-deb.yml) [![MacOS Core Tests](https://github.com/CannabisChain/cannabis-blockchain/actions/workflows/build-macos-installer.yml/badge.svg)](https://github.com/CannabisChain/cannabis-blockchain/actions/workflows/build-macos-installer.yml) [![Windows Installer on Windows 10 and Python 3.7](https://github.com/CannabisChain/cannabis-blockchain/actions/workflows/build-windows-installer.yml/badge.svg)](https://github.com/CannabisChain/cannabis-blockchain/actions/workflows/build-windows-installer.yml)  |
 
 [GitHub contributors](https://github.com/CannabisChain/cannabis-blockchain/graphs/contributors)
 
