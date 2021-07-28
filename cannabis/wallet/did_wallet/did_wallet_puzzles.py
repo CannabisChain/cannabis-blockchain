@@ -4,7 +4,7 @@ from cannabis.types.blockchain_format.program import Program
 from typing import List, Optional, Tuple
 from blspy import G1Element
 from cannabis.types.blockchain_format.coin import Coin
-from cannabis.types.coin_solution import CoinSolution
+from cannabis.types.coin_spend import CoinSpend
 from cannabis.util.ints import uint64
 from cannabis.wallet.puzzles.load_clvm import load_clvm
 from cannabis.types.condition_opcodes import ConditionOpcode
@@ -85,7 +85,7 @@ def create_spend_for_message(parent_of_message, recovering_coin, newpuz, pubkey)
     puzzle = create_recovery_message_puzzle(recovering_coin, newpuz, pubkey)
     coin = Coin(parent_of_message, puzzle.get_tree_hash(), uint64(0))
     solution = Program.to([])
-    coinsol = CoinSolution(coin, puzzle, solution)
+    coinsol = CoinSpend(coin, puzzle, solution)
     return coinsol
 
 
